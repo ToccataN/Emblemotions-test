@@ -4,6 +4,8 @@
 //
 //  Created by Chad Riston Denaux on 10/8/18.
 //
+//  This header will expose the methods that will be made available to the main JUCE
+//  components.
 
 #ifndef ObjCInterface_h
 #define ObjCInterface_h
