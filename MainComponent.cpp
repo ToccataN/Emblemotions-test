@@ -27,22 +27,14 @@ MainComponent::MainComponent() : audioAnalyser(fftOrder)
     audioValue.setJustificationType(Justification::centred);
     addAndMakeVisible(audioValue);
     
-    museValue.setText("Muse Signal Value: ", sendNotification);
-    museValue.setColour(Label::backgroundColourId, Colours::darkred);
-    museValue.setJustificationType(Justification::centred);
-    addAndMakeVisible(museValue);
-    
-    affectivaValue.setText("Facial Emotion Value: ", sendNotification);
-    affectivaValue.setColour(Label::backgroundColourId, Colours::darkred);
-    affectivaValue.setJustificationType(Justification::centred);
-    addAndMakeVisible(affectivaValue);
+    addMuseLabels();
     
     if(!connect(5003))
         std::cout << ShowTheNumber(555) << std::endl;
 
     addListener(this);
     
-    startTimerHz(10);
+    startTimerHz(5);
     setSize (800, 600);
 
     // specify the number of input and output channels that we want to open
@@ -117,7 +109,17 @@ void MainComponent::addOSCMessageArgument (const OSCArgument& arg, String m)
     if (arg.isFloat32())
     {
         typeAsString = "float32";
-        value =  m + String (arg.getFloat32());
+        if (m == alphaMessage)
+            museAlpha =  museStrings[0] + String (arg.getFloat32());
+        else if (m == betaMessage)
+            museBeta = museStrings[1] + String(arg.getFloat32());
+        else if (m == deltaMessage)
+            museDelta = museStrings[2] + String(arg.getFloat32());
+        else if (m == gammaMessage)
+            museGamma = museStrings[3] + String(arg.getFloat32());
+        else if (m == thetaMessage)
+            museTheta = museStrings[4] + String(arg.getFloat32());
+        
     }
     else if (arg.isInt32())
     {
@@ -140,7 +142,7 @@ void MainComponent::addOSCMessageArgument (const OSCArgument& arg, String m)
         typeAsString = "(unknown)";
     }
     
-    museText =  "Muse Signal Value: " + value;
+    museText =  value;
     std::cout << value << std::endl;
 }
 
@@ -152,14 +154,15 @@ void MainComponent::showConnectionErrorMessage (const String& messageText)
                                       "OK");
 }
 
-void MainComponent::updateLabelText(const String& text, Label& label)
+void MainComponent::updateLabelText(const String& text,const Label& label, int index)
 {
     if(&label == &audioValue)
         audioValue.setText("Audio Signal Value (FFT): " + text, sendNotification);
-    else if(&label == &museValue)
-        museValue.setText("Muse Data Signal (FFT): " + text, sendNotification);
-    else if(&label == &affectivaValue)
-        affectivaValue.setText(text, sendNotification);
+    else if(&label == museLabels[index])
+        museLabels[index]->setText(text, sendNotification);
+    else if(&label == affDexLabels[index])
+        affDexLabels[index]->setText(text, sendNotification);
+    
 }
 
 void MainComponent::timerCallback()
@@ -172,11 +175,22 @@ void MainComponent::timerCallback()
     att = floor(affAtt()*100)/100;
     joy = floor(affJoy()*100)/100;
     
-    String affVals = "Valence: " + String(valence) + " Anger: " + String(anger) + " Disgust: " + String(disgust) + " Engage: " + String(engage) + " Joy: " + String(joy) + " Attention: " + String(att);
-    
     updateLabelText(String(audioFFTValue), audioValue);
-    updateLabelText(museText, museValue);
-    updateLabelText(affVals, affectivaValue);
+   
+    updateLabelText(museAlpha, *museLabels[0], 0);
+    updateLabelText(museBeta, *museLabels[1], 1);
+    updateLabelText(museDelta, *museLabels[2], 2);
+    updateLabelText(museGamma, *museLabels[3], 3);
+    updateLabelText(museTheta, *museLabels[4], 4);
+    
+    updateLabelText(affDexStrings[0] + String(joy), *affDexLabels[0], 0);
+    updateLabelText(affDexStrings[1] + String(anger), *affDexLabels[1], 1);
+    updateLabelText(affDexStrings[2] + String(disgust), *affDexLabels[2], 2);
+    updateLabelText(affDexStrings[3] + String(engage), *affDexLabels[3], 3);
+    updateLabelText(affDexStrings[4] + String(att), *affDexLabels[4], 4);
+    updateLabelText(affDexStrings[5] + String(valence), *affDexLabels[5], 5);
+    
+    
     
 }
 
@@ -227,6 +241,33 @@ void MainComponent::resized()
     
     appHeader.setBounds(mainview.removeFromTop(labelHeight));
     audioValue.setBounds(leftScreen.removeFromTop(labelHeight).reduced(10));
-    museValue.setBounds(leftScreen.removeFromTop(labelHeight).reduced(10));
-    affectivaValue.setBounds(leftScreen.removeFromTop(labelHeight).reduced(10));
+    
+    for(auto i= 0; i < museLabels.size(); ++i)
+      museLabels[i]->setBounds(leftScreen.removeFromTop(labelHeight).reduced(5));
+    
+    for(auto i= 0; i < affDexLabels.size(); ++i)
+      affDexLabels[i]->setBounds(leftScreen.removeFromTop(labelHeight).reduced(5));
 }
+
+void MainComponent::addMuseLabels()
+{
+    for(auto i = 0 ; i < 5 ; ++i)
+    {
+        addAndMakeVisible(museLabels.add(new Label(museStrings[i])));
+        museLabels[i]->setColour(Label::backgroundColourId, Colours::darkred);
+        museLabels[i]->setJustificationType(Justification::centred);
+    }
+    
+    for(auto i = 0 ; i < affDexStrings.size() ; ++i)
+    {
+        addAndMakeVisible(affDexLabels.add(new Label(affDexStrings[i])));
+        affDexLabels[i]->setColour(Label::backgroundColourId, Colours::darkred);
+        affDexLabels[i]->setJustificationType(Justification::centred);
+    }
+    
+    
+    
+}
+
+
+

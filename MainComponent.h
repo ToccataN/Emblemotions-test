@@ -35,10 +35,10 @@ public:
     void resized() override;
     
     void process(float data);
-    void updateLabelText(const String& text, Label& label);
+    void updateLabelText(const String& text, const Label& label, int index = 0 );
     void timerCallback() override;
     
-    
+    void addMuseLabels();
     
     void oscMessageReceived(const OSCMessage& message) override;
     void oscBundleReceived(const OSCBundle& bundle) override;
@@ -71,16 +71,25 @@ private:
     bool fftReady= false;
     
     float joy, anger, disgust, engage, att, valence;
+    OwnedArray<Label> affDexLabels;
+    Array<String> affDexStrings = {"Joy: ", "Anger: ", "Disgust: ", "Engagement: ",
+        "Attention: ", "Valence: "};
     
-    Label audioValue, appHeader, museValue, affectivaValue;
+    
+    
+    Label audioValue, appHeader, affectivaValue;
     const int labelHeight = 40;
     
     //OSC variables for Muse
+    OwnedArray<Label> museLabels;
+    Label alphaLabel;
+    Array<String> museStrings ={"Alpha: ", "Beta: ", "Delta: ", "Gamma: ", "Theta: "};
+    
     const String alphaMessage = "/muse/elements/alpha_absolute",
-                 thetaMessage = "/muse/elements/theta_absolute",
-                 gammaMessage = "/muse/elements/gamma_absolute",
-                 betaMessage =  "/muse/elements/beta_absolute",
-                 deltaMessage = "/muse/elements/delta_absolute";
+                 thetaMessage = "/muse/elements/beta_absolute",
+                 gammaMessage = "/muse/elements/delta_absolute",
+                 betaMessage =  "/muse/elements/gamma_absolute",
+                 deltaMessage = "/muse/elements/theta_absolute";
     
     String museAlpha, museBeta, museDelta, museTheta, museGamma;
     String museText;
