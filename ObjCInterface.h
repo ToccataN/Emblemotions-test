@@ -12,6 +12,17 @@
 
 //method to show interface works for passing a variable to Obj-C from C++ and back.
 int ShowTheNumber(int i);
+
+//affDex Accessors
+float affJoy();
+float affAnger();
+float affDisgust();
+float affEngage();
+float affAtt();
+float affValence();
+
+
+
 void connector();
 
 #endif /* ObjCInterface_h */

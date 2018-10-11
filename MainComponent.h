@@ -39,7 +39,8 @@ public:
     
     void oscMessageReceived(const OSCMessage& message) override;
     void timerCallback() override;
-    void shower();
+    bool receiveChecker(const OSCMessage& m);
+    void showConnectionErrorMessage (const String& messageText);
     
     enum{
         fftOrder= 7,
@@ -57,9 +58,12 @@ private:
     int fftIndex= 0;
     bool fftReady= false;
     
-    float oscMuse= 0;
+    float oscMuse = 0.0;
     
-    Label audioValue, appHeader, museValue;
+    float joy, anger, disgust, engage, att, valence;
+    
+    Label audioValue, appHeader, museValue, affectivaValue;
+    
     const int labelHeight = 40;
     
     //==============================================================================

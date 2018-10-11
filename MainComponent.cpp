@@ -32,10 +32,21 @@ MainComponent::MainComponent() : audioAnalyser(fftOrder)
     museValue.setJustificationType(Justification::centred);
     addAndMakeVisible(museValue);
     
-    connect(6071);
-    addListener(this, "/elements/delta_absolute");
+    affectivaValue.setText("Facial Emotion Value: ", sendNotification);
+    affectivaValue.setColour(Label::backgroundColourId, Colours::darkred);
+    affectivaValue.setJustificationType(Justification::centred);
+    addAndMakeVisible(affectivaValue);
     
-    std::cout << ShowTheNumber(555) << std::endl;
+    if(!connect(5003)){
+        std::cout << ShowTheNumber(555) << std::endl;
+    } else{
+        std::cout << "IM HERE" << std::endl;
+    }
+
+    addListener( this, "/muse/elements/blink");
+    
+    
+    
 
     startTimerHz(10);
     setSize (800, 600);
@@ -51,10 +62,6 @@ MainComponent::~MainComponent()
 }
 
 //==============================================================================
-void MainComponent::shower()
-{
-    std::cout << ShowTheNumber(555) << std::endl;
-}
 
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
@@ -87,12 +94,42 @@ void MainComponent::process(float data)
 
 }
 
+bool MainComponent::receiveChecker(const OSCMessage& m){
+    int sizeVar = m.size();
+    
+    if(sizeVar > 0)
+    {
+        std::cout << sizeVar << std::endl;
+        for(int i=0 ; i< sizeVar ; ++i)
+        {
+            if(m[i].isFloat32()){
+                std::cout << m[i].getFloat32() << std::endl;
+                
+            }
+        }
+        return true;
+    } else {
+        std::cout << " Im not here " << std::endl;
+        return false;
+    }
+}
+
 void MainComponent::oscMessageReceived(const OSCMessage& message)
 {
-    if(message.size() == 1 && message[0].isFloat32()){
-        oscMuse= message[0].getFloat32();
+    
+    if(message.size()==1 && message[0].isInt32()){
+        oscMuse = message[0].getInt32();
+        std::cout << message[0].getInt32() << std::endl;
     }
     
+}
+
+void MainComponent::showConnectionErrorMessage (const String& messageText)
+{
+    AlertWindow::showMessageBoxAsync (AlertWindow::WarningIcon,
+                                      "Connection error",
+                                      messageText,
+                                      "OK");
 }
 
 void MainComponent::updateLabelText(const String& text, Label& label)
@@ -101,12 +138,26 @@ void MainComponent::updateLabelText(const String& text, Label& label)
         audioValue.setText("Audio Signal Value (FFT): " + text, sendNotification);
     else if(&label == &museValue)
         museValue.setText("Muse Data Signal (FFT): " + text, sendNotification);
-    
+    else if(&label == &affectivaValue)
+        affectivaValue.setText(text, sendNotification);
 }
 
 void MainComponent::timerCallback()
 {
+    
+    valence = floor(affValence()*100)/100;
+    anger = floor(affAnger()*100)/100;
+    disgust = floor(affDisgust()*100)/100;
+    engage = floor(affEngage()*100)/100;
+    att = floor(affAtt()*100)/100;
+    joy = floor(affJoy()*100)/100;
+    
+    String affVals = "Valence: " + String(valence) + " Anger: " + String(anger) + " Disgust: " + String(disgust) + " Engage: " + String(engage) + " Joy: " + String(joy) + " Attention: " + String(att);
+    
     updateLabelText(String(audioFFTValue), audioValue);
+    updateLabelText(String(oscMuse), museValue);
+    updateLabelText(affVals, affectivaValue);
+    
 }
 
 void MainComponent::getNextAudioBlock (const AudioSourceChannelInfo& bufferToFill)
@@ -157,4 +208,5 @@ void MainComponent::resized()
     appHeader.setBounds(mainview.removeFromTop(labelHeight));
     audioValue.setBounds(leftScreen.removeFromTop(labelHeight).reduced(10));
     museValue.setBounds(leftScreen.removeFromTop(labelHeight).reduced(10));
+    affectivaValue.setBounds(leftScreen.removeFromTop(labelHeight).reduced(10));
 }
