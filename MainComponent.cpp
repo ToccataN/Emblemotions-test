@@ -37,11 +37,8 @@ MainComponent::MainComponent() : audioAnalyser(fftOrder)
     affectivaValue.setJustificationType(Justification::centred);
     addAndMakeVisible(affectivaValue);
     
-    if(!connect(5003)){
+    if(!connect(5003))
         std::cout << ShowTheNumber(555) << std::endl;
-    } else{
-        std::cout << "IM HERE" << std::endl;
-    }
 
     addListener(this);
     
@@ -76,8 +73,6 @@ void MainComponent::process(float data)
     {
         
       audioAnalyser.performRealOnlyForwardTransform(fftData);
-      
-      
         
       for(int i= 0 ; i < fftSize ; ++i )
         if(fftData[i] != 0 && fftData[i] >= 0.001) audioFFTValue = fftData[i];

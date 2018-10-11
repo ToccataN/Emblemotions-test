@@ -75,6 +75,7 @@ private:
     Label audioValue, appHeader, museValue, affectivaValue;
     const int labelHeight = 40;
     
+    //OSC variables for Muse
     const String alphaMessage = "/muse/elements/alpha_absolute",
                  thetaMessage = "/muse/elements/theta_absolute",
                  gammaMessage = "/muse/elements/gamma_absolute",
