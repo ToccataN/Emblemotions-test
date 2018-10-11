@@ -43,11 +43,8 @@ MainComponent::MainComponent() : audioAnalyser(fftOrder)
         std::cout << "IM HERE" << std::endl;
     }
 
-    addListener( this, "/muse/elements/blink");
+    addListener(this);
     
-    
-    
-
     startTimerHz(10);
     setSize (800, 600);
 
@@ -94,34 +91,62 @@ void MainComponent::process(float data)
 
 }
 
-bool MainComponent::receiveChecker(const OSCMessage& m){
-    int sizeVar = m.size();
-    
-    if(sizeVar > 0)
+void MainComponent::oscMessageReceived(const OSCMessage& message)
+{
+    String m = message.getAddressPattern().toString();
+    if (!message.isEmpty() && ( m == alphaMessage || m == betaMessage ||
+            m == thetaMessage || m == gammaMessage || m == deltaMessage))
     {
-        std::cout << sizeVar << std::endl;
-        for(int i=0 ; i< sizeVar ; ++i)
-        {
-            if(m[i].isFloat32()){
-                std::cout << m[i].getFloat32() << std::endl;
-                
-            }
-        }
-        return true;
-    } else {
-        std::cout << " Im not here " << std::endl;
-        return false;
+        for (OSCArgument* arg = message.begin(); arg != message.end(); ++arg)
+            addOSCMessageArgument (*arg, m);
     }
 }
 
-void MainComponent::oscMessageReceived(const OSCMessage& message)
+void MainComponent::oscBundleReceived(const juce::OSCBundle &bundle)
 {
+    for (int i = 0; i < bundle.size(); ++i)
+    {
+        auto elem = bundle[i];
+        if (elem.isMessage())
+            oscMessageReceived (elem.getMessage());
+        else if (elem.isBundle())
+            oscBundleReceived (elem.getBundle());
+    }
+}
+
+void MainComponent::addOSCMessageArgument (const OSCArgument& arg, String m)
+{
+    String typeAsString;
+    String value;
     
-    if(message.size()==1 && message[0].isInt32()){
-        oscMuse = message[0].getInt32();
-        std::cout << message[0].getInt32() << std::endl;
+    if (arg.isFloat32())
+    {
+        typeAsString = "float32";
+        value =  m + String (arg.getFloat32());
+    }
+    else if (arg.isInt32())
+    {
+        typeAsString = "int32";
+        value = m + " : " + String (arg.getInt32());
+    }
+    else if (arg.isString())
+    {
+        typeAsString = "string";
+        value = arg.getString();
+    }
+    else if (arg.isBlob())
+    {
+        typeAsString = "blob";
+        auto& blob = arg.getBlob();
+        value = String::fromUTF8 ((const char*) blob.getData(), (int) blob.getSize());
+    }
+    else
+    {
+        typeAsString = "(unknown)";
     }
     
+    museText =  "Muse Signal Value: " + value;
+    std::cout << value << std::endl;
 }
 
 void MainComponent::showConnectionErrorMessage (const String& messageText)
@@ -155,7 +180,7 @@ void MainComponent::timerCallback()
     String affVals = "Valence: " + String(valence) + " Anger: " + String(anger) + " Disgust: " + String(disgust) + " Engage: " + String(engage) + " Joy: " + String(joy) + " Attention: " + String(att);
     
     updateLabelText(String(audioFFTValue), audioValue);
-    updateLabelText(String(oscMuse), museValue);
+    updateLabelText(museText, museValue);
     updateLabelText(affVals, affectivaValue);
     
 }

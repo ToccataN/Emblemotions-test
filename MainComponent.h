@@ -17,7 +17,8 @@
 class MainComponent   : public AudioAppComponent,
                         private Timer,
                         public OSCReceiver,
-      public OSCReceiver::ListenerWithOSCAddress<OSCReceiver::MessageLoopCallback>
+      public OSCReceiver::Listener<OSCReceiver::MessageLoopCallback>,
+                       private AsyncUpdater
 {
 public:
     //==============================================================================
@@ -35,11 +36,22 @@ public:
     
     void process(float data);
     void updateLabelText(const String& text, Label& label);
+    void timerCallback() override;
+    
     
     
     void oscMessageReceived(const OSCMessage& message) override;
-    void timerCallback() override;
+    void oscBundleReceived(const OSCBundle& bundle) override;
+    
     bool receiveChecker(const OSCMessage& m);
+    void addOSCBundle (const OSCBundle& bundle, int level = 0);
+    void addOSCMessageArgument (const OSCArgument& arg , String m);
+    
+    void handleAsyncUpdate() override
+    {
+        
+    }
+    
     void showConnectionErrorMessage (const String& messageText);
     
     enum{
@@ -58,13 +70,19 @@ private:
     int fftIndex= 0;
     bool fftReady= false;
     
-    float oscMuse = 0.0;
-    
     float joy, anger, disgust, engage, att, valence;
     
     Label audioValue, appHeader, museValue, affectivaValue;
-    
     const int labelHeight = 40;
+    
+    const String alphaMessage = "/muse/elements/alpha_absolute",
+                 thetaMessage = "/muse/elements/theta_absolute",
+                 gammaMessage = "/muse/elements/gamma_absolute",
+                 betaMessage =  "/muse/elements/beta_absolute",
+                 deltaMessage = "/muse/elements/delta_absolute";
+    
+    String museAlpha, museBeta, museDelta, museTheta, museGamma;
+    String museText;
     
     //==============================================================================
     // Your private member variables go here...
