@@ -8,6 +8,7 @@
 
 #pragma once
 #include "../JuceLibraryCode/JuceHeader.h"
+#include "BasicThumbComp.h"
 
 //==============================================================================
 /*
@@ -18,7 +19,8 @@ class MainComponent   : public AudioAppComponent,
                         private Timer,
                         public OSCReceiver,
       public OSCReceiver::Listener<OSCReceiver::MessageLoopCallback>,
-                       private AsyncUpdater
+                       private AsyncUpdater,
+                       public ChangeListener
 {
 public:
     //==============================================================================
@@ -29,7 +31,8 @@ public:
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
     void getNextAudioBlock (const AudioSourceChannelInfo& bufferToFill) override;
     void releaseResources() override;
-
+    
+    void changeListenerCallback (ChangeBroadcaster* source) override;
     //==============================================================================
     void paint (Graphics& g) override;
     void resized() override;
@@ -58,8 +61,13 @@ public:
         fftOrder= 7,
         fftSize = 1 << fftOrder
     };
+    
+    //pitch detector aubio
+    void pitchDetector(float data, int index);
+    
 
 private:
+    
     double lastSampleRate;
     double audioFFTValue;
     
@@ -68,6 +76,7 @@ private:
     float fifo[fftSize];
     float fftData[fftSize * 2];
     int fftIndex= 0;
+    int fftSampleIndex = 0;
     bool fftReady= false;
     
     float joy, anger, disgust, engage, att, valence;
@@ -77,7 +86,8 @@ private:
     
     
     
-    Label audioValue, appHeader, affectivaValue;
+    Label audioValue, appHeader, noteValue;
+    String currentNote= "Pitch: ";
     const int labelHeight = 40;
     
     //OSC variables for Muse
@@ -93,6 +103,105 @@ private:
     
     String museAlpha, museBeta, museDelta, museTheta, museGamma;
     String museText;
+    
+    //File Uploader Variables and functions
+    AudioThumbnailCache atCache;
+    BasicThumbComp thumbComp;
+    AudioFormatManager afManager;
+    AudioTransportSource transportSource;
+    
+    enum TransportState
+    {
+        Stopped,
+        Starting,
+        Playing,
+        Stopping
+    };
+    
+    TextButton openButton;
+    TextButton playButton;
+    TextButton stopButton;
+    
+    TransportState playstate;
+    std::unique_ptr<AudioFormatReaderSource> readerSource;
+    
+    void changeState (TransportState newState)
+    {
+        if (playstate != newState)
+        {
+            playstate = newState;
+            
+            switch (playstate)
+            {
+                case Stopped:
+                    stopButton.setEnabled (false);
+                    playButton.setEnabled (true);
+                    transportSource.setPosition (0.0);
+                    break;
+                    
+                case Starting:
+                    playButton.setEnabled (false);
+                    transportSource.start();
+                    break;
+                    
+                case Playing:
+                    stopButton.setEnabled (true);
+                    break;
+                    
+                case Stopping:
+                    transportSource.stop();
+                    break;
+                    
+                default:
+                    jassertfalse;
+                    break;
+            }
+        }
+    }
+    
+    void transportSourceChanged()
+    {
+        if (transportSource.isPlaying())
+            changeState (Playing);
+        else
+            changeState (Stopped);
+    }
+    
+    void openButtonClicked()
+    {
+        FileChooser chooser ("Select a Wave file to play...",
+                             File::nonexistent,
+                             "*.wav");
+        
+        if (chooser.browseForFileToOpen())
+        {
+            File file (chooser.getResult());
+            
+            if (auto* reader = afManager.createReaderFor (file))
+            {
+                std::unique_ptr<AudioFormatReaderSource> newSource (new AudioFormatReaderSource (reader, true));
+                transportSource.setSource (newSource.get(), 0, nullptr, reader->sampleRate);
+                playButton.setEnabled (true);
+                thumbComp.setFile (file);
+                readerSource.reset (newSource.release());
+            }
+        }
+    }
+    
+    void playButtonClicked()
+    {
+        changeState (Starting);
+    }
+    
+    void stopButtonClicked()
+    {
+        changeState (Stopping);
+    }
+    
+    //pitch variables
+    Array<String> notes ={"A", "A#", "B", "C" ,"C#" , "D", "D#" , "E" , "F","F#", "G", "G#"};
+    Array<String> midiTable;
+    
     
     //==============================================================================
     // Your private member variables go here...

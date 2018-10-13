@@ -9,9 +9,18 @@
 #include "ObjCInterface.h"
 #include "MainComponent.h"
 
-MainComponent::MainComponent() : audioAnalyser(fftOrder)
+extern "C"{
+    #include "aubio/aubio.h"
+}
+
+
+MainComponent::MainComponent() : audioAnalyser(fftOrder),
+                                 atCache(5),
+                                 thumbComp(512, afManager, atCache),
+                                 playstate(Stopped)
 
 {
+    
     auto audioDevice = deviceManager.getCurrentAudioDevice();
     auto numInputChannels = jmax(audioDevice != nullptr ? audioDevice->getActiveInputChannels() .countNumberOfSetBits() : 1, 1);
     auto outputChannels = audioDevice != nullptr ? audioDevice->getActiveOutputChannels() .countNumberOfSetBits() : 2;
@@ -29,6 +38,9 @@ MainComponent::MainComponent() : audioAnalyser(fftOrder)
     
     addMuseLabels();
     
+    afManager.registerBasicFormats();
+    transportSource.addChangeListener (this);
+    
     if(!connect(5003))
         std::cout << ShowTheNumber(555) << std::endl;
 
@@ -38,6 +50,13 @@ MainComponent::MainComponent() : audioAnalyser(fftOrder)
     setSize (800, 600);
 
     // specify the number of input and output channels that we want to open
+    for(int i=0; i < 128; ++i){
+        if(i < 21) midiTable.insert(i, "none") ;
+        int in = (i % 12);
+        if(in >= notes.size()) in -= 12;
+        midiTable.insert(i, notes[in]);
+        std::cout << midiTable[i] << std::endl;
+    }
     
 }
 
@@ -45,6 +64,7 @@ MainComponent::~MainComponent()
 {
     // This shuts down the audio device and clears the audio source.
     shutdownAudio();
+    transportSource.releaseResources();
 }
 
 //==============================================================================
@@ -57,19 +77,33 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
     spec.sampleRate = lastSampleRate;
     spec.maximumBlockSize = samplesPerBlockExpected;
     
+    transportSource.prepareToPlay (samplesPerBlockExpected, sampleRate);
 }
 
 void MainComponent::process(float data)
 {
     if(fftIndex == fftSize)
     {
-        
+    
       audioAnalyser.performRealOnlyForwardTransform(fftData);
-        
-      for(int i= 0 ; i < fftSize ; ++i )
-        if(fftData[i] != 0 && fftData[i] >= 0.001) audioFFTValue = fftData[i];
-      //if(fftData[i] != 0) std::cout << " current:  " << fftData[i] << std:: endl;
-        
+      float temp = 0.0;
+      int index = 0;
+        for(int i= 0 ; i < fftSize ; ++i ){
+          if(fftData[i] != 0 && fftData[i] >= 0.001) audioFFTValue = fftData[i];
+         
+            
+            if(temp == 0.0){
+                temp = fftData[i];
+            } else {
+                if(fftData[i] > temp){
+                  temp = fftData[i];
+                  index = i;
+                }
+            }
+            
+        }
+
+      pitchDetector(temp, index);
       fftIndex= 0;
         
     }
@@ -162,6 +196,8 @@ void MainComponent::updateLabelText(const String& text,const Label& label, int i
         museLabels[index]->setText(text, sendNotification);
     else if(&label == affDexLabels[index])
         affDexLabels[index]->setText(text, sendNotification);
+    else if(&label == &noteValue)
+        noteValue.setText(currentNote, sendNotification);
     
 }
 
@@ -190,36 +226,50 @@ void MainComponent::timerCallback()
     updateLabelText(affDexStrings[4] + String(att), *affDexLabels[4], 4);
     updateLabelText(affDexStrings[5] + String(valence), *affDexLabels[5], 5);
     
-    
+    updateLabelText(currentNote, noteValue);
     
 }
 
 void MainComponent::getNextAudioBlock (const AudioSourceChannelInfo& bufferToFill)
 {
     
-    
-    for(int i= 0 ; i < bufferToFill.buffer->getNumChannels(); ++i){
-        auto* inputChannel = bufferToFill.buffer->getReadPointer(0, bufferToFill.startSample);
-        
-        for(int samp = 0; samp < bufferToFill.numSamples; ++samp)
-            process(inputChannel[samp]);
-        
-       
         bufferToFill.clearActiveBufferRegion();
+        transportSource.getNextAudioBlock(bufferToFill);
+
         
+        for(int i= 0 ; i < bufferToFill.buffer->getNumChannels(); ++i){
+            auto* inputChannel = bufferToFill.buffer->getReadPointer(0, bufferToFill.startSample);
+            
+            for(int samp = 0; samp < bufferToFill.numSamples; ++samp){
+                process(inputChannel[samp]);
+                
+            }
+            
+        }
+    
+}
+
+void MainComponent::pitchDetector(float data, int index)
+{
+    if (fftSampleIndex < 44100){
+       fftSampleIndex += 512;
+    } else{
+        double f = ((index * 44100) / 512);
+        double m = round(log(f/440.0)/log(2) * 12 + 67);
+        if((m > 20 || m < 128 )&& notes.indexOf(midiTable[m]) != -1){
+            currentNote= "Pitch: " + String(midiTable[m]);
+        }
+        
+        fftSampleIndex = 0;
     }
-    
-    
     
     
 }
 
 void MainComponent::releaseResources()
 {
-    // This will be called when the audio device stops, or when it is being
-    // restarted due to a setting change.
 
-    // For more details, see the help for AudioProcessor::releaseResources()
+    
 }
 
 //==============================================================================
@@ -247,7 +297,26 @@ void MainComponent::resized()
     
     for(auto i= 0; i < affDexLabels.size(); ++i)
       affDexLabels[i]->setBounds(leftScreen.removeFromTop(labelHeight).reduced(5));
+    
+    //Right side
+    Rectangle<int> rightScreen;
+    rightScreen.setBounds(mainview.getWidth()/2, labelHeight, mainview.getWidth()/2, mainview.getHeight());
+    
+    openButton.setBounds (rightScreen.removeFromTop(labelHeight).reduced(10));
+    playButton.setBounds (rightScreen.removeFromTop(labelHeight).reduced(10));
+    stopButton.setBounds (rightScreen.removeFromTop(labelHeight).reduced(10));
+    
+    Rectangle<int> thumbnailBounds (rightScreen.getX()+10,rightScreen.getY() , rightScreen.getWidth() - 20, rightScreen.getHeight() - 220);
+    
+    thumbComp.setBounds(thumbnailBounds);
+    
+    Rectangle<int> lowerVals = leftScreen.removeFromTop(labelHeight);
+    
+    noteValue.setBounds(lowerVals.removeFromLeft(leftScreen.getWidth()/2).reduced(5));
+    
 }
+
+
 
 void MainComponent::addMuseLabels()
 {
@@ -266,8 +335,37 @@ void MainComponent::addMuseLabels()
     }
     
     
+    noteValue.setText("Pitch: ", sendNotification);
+    noteValue.setColour(Label::backgroundColourId, Colours::darkred);
+    noteValue.setJustificationType(Justification::centred);
+    addAndMakeVisible(noteValue);
+    
+    addAndMakeVisible (&openButton);
+    openButton.setButtonText ("Open...");
+    openButton.onClick = [this] { openButtonClicked(); };
+    
+    addAndMakeVisible (&playButton);
+    playButton.setButtonText ("Play");
+    playButton.onClick = [this] { playButtonClicked(); };
+    playButton.setColour (TextButton::buttonColourId, Colours::green);
+    playButton.setEnabled (false);
+    
+    addAndMakeVisible (&stopButton);
+    stopButton.setButtonText ("Stop");
+    stopButton.onClick = [this] { stopButtonClicked(); };
+    stopButton.setColour (TextButton::buttonColourId, Colours::red);
+    stopButton.setEnabled (false);
+    
+    addAndMakeVisible (&thumbComp);
     
 }
 
+//File Uploader
+void MainComponent::changeListenerCallback (ChangeBroadcaster* source)
+{
+    if (source == &transportSource)
+        transportSourceChanged();
+    
+}
 
 
