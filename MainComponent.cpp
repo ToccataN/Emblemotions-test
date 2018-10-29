@@ -9,22 +9,20 @@
 #include "ObjCInterface.h"
 #include "MainComponent.h"
 
-extern "C"{
-    #include "aubio/aubio.h"
-}
-
 
 MainComponent::MainComponent() : audioAnalyser(fftOrder),
-                                 atCache(5),
-                                 thumbComp(512, afManager, atCache),
-                                 playstate(Stopped)
+                                 atCache(20)
+                                 //,superFB(8, frequencies, widths, 44100)
 
 {
-    
+
     auto audioDevice = deviceManager.getCurrentAudioDevice();
     auto numInputChannels = jmax(audioDevice != nullptr ? audioDevice->getActiveInputChannels() .countNumberOfSetBits() : 1, 1);
     auto outputChannels = audioDevice != nullptr ? audioDevice->getActiveOutputChannels() .countNumberOfSetBits() : 2;
+     
     setAudioChannels (numInputChannels, outputChannels);
+    
+    setAudioChannels(0, 2);
     
     appHeader.setText("Emblemotions App", dontSendNotification);
     appHeader.setColour(Label::textColourId, Colours::darkred);
@@ -36,13 +34,20 @@ MainComponent::MainComponent() : audioAnalyser(fftOrder),
     audioValue.setJustificationType(Justification::centred);
     addAndMakeVisible(audioValue);
     
+    afManager.registerBasicFormats();
+    
+    thumbnails.add(new BasicThumbComp(512, afManager, atCache));
+    thumbnails.add(new BasicThumbComp(512, afManager, atCache));
+    thumbnails.add(new BasicThumbComp(512, afManager, atCache));
+    thumbnails.add(new BasicThumbComp(512, afManager, atCache));
+    
+    for(auto i : thumbnails)
+        std::cout << &i << std::endl;
+    
     addMuseLabels();
     
-    afManager.registerBasicFormats();
-    transportSource.addChangeListener (this);
     
-    if(!connect(5003))
-        std::cout << ShowTheNumber(555) << std::endl;
+    connect(5003);
 
     addListener(this);
     
@@ -59,15 +64,17 @@ MainComponent::MainComponent() : audioAnalyser(fftOrder),
     }
     
 }
+//static OwnedArray<String> totalValues;
 
 MainComponent::~MainComponent()
 {
     // This shuts down the audio device and clears the audio source.
     shutdownAudio();
-    transportSource.releaseResources();
 }
 
 //==============================================================================
+
+
 
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
@@ -77,14 +84,14 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
     spec.sampleRate = lastSampleRate;
     spec.maximumBlockSize = samplesPerBlockExpected;
     
-    transportSource.prepareToPlay (samplesPerBlockExpected, sampleRate);
+    mixer.prepareToPlay (samplesPerBlockExpected, lastSampleRate);
 }
 
 void MainComponent::process(float data)
 {
     if(fftIndex == fftSize)
     {
-    
+
       audioAnalyser.performRealOnlyForwardTransform(fftData);
       float temp = 0.0;
       int index = 0;
@@ -102,7 +109,12 @@ void MainComponent::process(float data)
             }
             
         }
-
+        /*
+        for(auto i = 0; i < 128; ++i)
+        {
+            std::cout << "fres: " << String(bands[i]) << std::endl;
+        }
+        */
       pitchDetector(temp, index);
       fftIndex= 0;
         
@@ -203,6 +215,7 @@ void MainComponent::updateLabelText(const String& text,const Label& label, int i
 
 void MainComponent::timerCallback()
 {
+    discreteCount += 1;
     
     valence = floor(affValence()*100)/100;
     anger = floor(affAnger()*100)/100;
@@ -228,24 +241,30 @@ void MainComponent::timerCallback()
     
     updateLabelText(currentNote, noteValue);
     
+    String updateCSV = String(discreteCount) + String(audioFFTValue) + museAlpha + museBeta + museDelta + museGamma + museTheta + String(joy) +String(anger) + String(disgust) +  String(engage) +  String(att) +String(valence) + currentNote;
+    
+    //totalValues.add(&updateCSV);
+    
+
 }
 
 void MainComponent::getNextAudioBlock (const AudioSourceChannelInfo& bufferToFill)
 {
     
-        bufferToFill.clearActiveBufferRegion();
-        transportSource.getNextAudioBlock(bufferToFill);
-
-        
-        for(int i= 0 ; i < bufferToFill.buffer->getNumChannels(); ++i){
-            auto* inputChannel = bufferToFill.buffer->getReadPointer(0, bufferToFill.startSample);
-            
-            for(int samp = 0; samp < bufferToFill.numSamples; ++samp){
+    mixer.getNextAudioBlock(bufferToFill);
+    
+    for(int i= 0 ; i < bufferToFill.buffer->getNumChannels(); ++i){
+        auto* inputChannel = bufferToFill.buffer->getReadPointer(0, bufferToFill.startSample);
+    
+        for(int samp = 0; samp < bufferToFill.numSamples; ++samp){
                 process(inputChannel[samp]);
-                
-            }
+            //float *tempDat = nullptr;
+            //memcpy(tempDat, &inputChannel[samp], sizeof(inputChannel[samp]));
+           // superFB.process(tempDat, bands, peak, sum, 512);
             
         }
+        
+    }
     
 }
 
@@ -257,7 +276,7 @@ void MainComponent::pitchDetector(float data, int index)
         double f = ((index * 44100) / 512);
         double m = round(log(f/440.0)/log(2) * 12 + 67);
         if((m > 20 || m < 128 )&& notes.indexOf(midiTable[m]) != -1){
-            currentNote= "Pitch: " + String(midiTable[m]);
+            //currentNote= "Pitch: " + String(midiTable[m]);
         }
         
         fftSampleIndex = 0;
@@ -268,8 +287,9 @@ void MainComponent::pitchDetector(float data, int index)
 
 void MainComponent::releaseResources()
 {
-
-    
+    FileArray.clear();
+    thumbnails.clear();
+    mixer.releaseResources();
 }
 
 //==============================================================================
@@ -302,14 +322,17 @@ void MainComponent::resized()
     Rectangle<int> rightScreen;
     rightScreen.setBounds(mainview.getWidth()/2, labelHeight, mainview.getWidth()/2, mainview.getHeight());
     
-    openButton.setBounds (rightScreen.removeFromTop(labelHeight).reduced(10));
+    for(auto i = 0 ; i < openButton.size() ; ++i){
+        openButton[i]->setBounds (rightScreen.removeFromTop(labelHeight).reduced(10));
+        thumbnails[i]->setBounds(rightScreen.removeFromTop(labelHeight+10).reduced(10));
+    }
+    
     playButton.setBounds (rightScreen.removeFromTop(labelHeight).reduced(10));
     stopButton.setBounds (rightScreen.removeFromTop(labelHeight).reduced(10));
     
     Rectangle<int> thumbnailBounds (rightScreen.getX()+10,rightScreen.getY() , rightScreen.getWidth() - 20, rightScreen.getHeight() - 220);
     
-    thumbComp.setBounds(thumbnailBounds);
-    
+
     Rectangle<int> lowerVals = leftScreen.removeFromTop(labelHeight);
     
     noteValue.setBounds(lowerVals.removeFromLeft(leftScreen.getWidth()/2).reduced(5));
@@ -340,10 +363,14 @@ void MainComponent::addMuseLabels()
     noteValue.setJustificationType(Justification::centred);
     addAndMakeVisible(noteValue);
     
-    addAndMakeVisible (&openButton);
-    openButton.setButtonText ("Open...");
-    openButton.onClick = [this] { openButtonClicked(); };
     
+    for(auto i = 0 ; i < sectionString.size() ; ++i){
+        addAndMakeVisible (openButton.add(new TextButton(sectionString[i])));
+        openButton[i]->onClick = [this, i]{ openButtonClicked(i); };
+        addAndMakeVisible(thumbnails[i]);
+        
+    }
+        
     addAndMakeVisible (&playButton);
     playButton.setButtonText ("Play");
     playButton.onClick = [this] { playButtonClicked(); };
@@ -356,16 +383,80 @@ void MainComponent::addMuseLabels()
     stopButton.setColour (TextButton::buttonColourId, Colours::red);
     stopButton.setEnabled (false);
     
-    addAndMakeVisible (&thumbComp);
+    
     
 }
 
 //File Uploader
 void MainComponent::changeListenerCallback (ChangeBroadcaster* source)
 {
-    if (source == &transportSource)
-        transportSourceChanged();
+        
+}
+
+void MainComponent::openButtonClicked(int index)
+{
+    
+    FileChooser chooser ("Select a Wave file to play...",
+                         File(),
+                         "*.wav");
+    
+    if (chooser.browseForFileToOpen())
+    {
+        
+      File file (chooser.getResult());
+      playButton.setEnabled(true);
+      FileArray.set(index, file);
+      thumbnails[index]->setFile(file);
+      mixer.loadAudioAssets(FileArray);
+    
+    }
+    
     
 }
+
+void MainComponent::playButtonClicked()
+{
+    stopButton.setEnabled(true);
+    playButton.setEnabled(false);
+    mixer.start();
+}
+
+void MainComponent::stopButtonClicked()
+{
+    stopButton.setEnabled(false);
+    playButton.setEnabled(true);
+    mixer.stop();
+}
+
+UploadCSVComp::UploadCSVComp()
+{
+    startTimer(10000);
+    
+}
+
+UploadCSVComp::~UploadCSVComp()
+{
+    
+}
+
+void UploadCSVComp::timerCallback()
+{
+   /*
+    File f("~/packet.csv");
+    FileOutputStream fs(f);
+    
+    
+    String header = "N | FFT | Alpha | Beta | Delta | Gamma | Theta | Joy | Anger | Disgust | Engagement | Attention | Valence | Pitch";
+    
+    fs.writeText(header, true, false, "\n");
+    
+    */
+   
+    
+}
+
+
+
+
 
 

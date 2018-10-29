@@ -11,7 +11,7 @@
 #define ObjCInterface_h
 
 //method to show interface works for passing a variable to Obj-C from C++ and back.
-int ShowTheNumber(int i);
+//int ShowTheNumber(int i);
 
 //affDex Accessors
 float affJoy();

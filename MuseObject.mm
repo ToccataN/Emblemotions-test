@@ -1,4 +1,4 @@
-#include <Muse/Muse.h>
+/*
 #include "MuseObject.h"
 
 @implementation MuseObject{
@@ -23,3 +23,4 @@ int ShowTheNumber(int i)
 }
 
 @end
+*/

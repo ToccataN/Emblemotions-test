@@ -10,6 +10,7 @@
 
 #import "ObjCInterface.h"
 #import <Foundation/Foundation.h>
+/*
 #import <Muse/Muse.h>
 
 // An Objective-C class that needs to be accessed from C++
@@ -18,5 +19,6 @@
 - (int) showNum:(int) i;
 
 @end
+ */
 #endif /* MuseObject_h */
 

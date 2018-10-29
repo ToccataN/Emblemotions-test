@@ -7,8 +7,11 @@
 */
 
 #pragma once
+#include "ObjCInterface.h"
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "BasicThumbComp.h"
+#include "MultiChannelAudioSource.h"
+#include "SuperpoweredBandpassFilterBank.h"
 
 //==============================================================================
 /*
@@ -21,6 +24,7 @@ class MainComponent   : public AudioAppComponent,
       public OSCReceiver::Listener<OSCReceiver::MessageLoopCallback>,
                        private AsyncUpdater,
                        public ChangeListener
+
 {
 public:
     //==============================================================================
@@ -64,11 +68,14 @@ public:
     
     //pitch detector aubio
     void pitchDetector(float data, int index);
-    
+    HashMap<int, File> FileArray;
+    void openButtonClicked(int index);
+    void playButtonClicked();
+    void stopButtonClicked();
 
 private:
     
-    double lastSampleRate;
+    double lastSampleRate= 44100;
     double audioFFTValue;
     
     dsp::FFT audioAnalyser;
@@ -105,106 +112,55 @@ private:
     String museText;
     
     //File Uploader Variables and functions
+
     AudioThumbnailCache atCache;
-    BasicThumbComp thumbComp;
+    //BasicThumbComp bassThumb, drumThumb, synthThumb, voiceThumb;
+    OwnedArray<BasicThumbComp> thumbnails;
     AudioFormatManager afManager;
-    AudioTransportSource transportSource;
     
-    enum TransportState
-    {
-        Stopped,
-        Starting,
-        Playing,
-        Stopping
-    };
-    
-    TextButton openButton;
+    Array<String> sectionString = {"Bass", "Drums", "Synth", "Voice"};
+    OwnedArray<TextButton> openButton;
     TextButton playButton;
     TextButton stopButton;
     
-    TransportState playstate;
-    std::unique_ptr<AudioFormatReaderSource> readerSource;
     
-    void changeState (TransportState newState)
-    {
-        if (playstate != newState)
-        {
-            playstate = newState;
-            
-            switch (playstate)
-            {
-                case Stopped:
-                    stopButton.setEnabled (false);
-                    playButton.setEnabled (true);
-                    transportSource.setPosition (0.0);
-                    break;
-                    
-                case Starting:
-                    playButton.setEnabled (false);
-                    transportSource.start();
-                    break;
-                    
-                case Playing:
-                    stopButton.setEnabled (true);
-                    break;
-                    
-                case Stopping:
-                    transportSource.stop();
-                    break;
-                    
-                default:
-                    jassertfalse;
-                    break;
-            }
-        }
-    }
     
-    void transportSourceChanged()
-    {
-        if (transportSource.isPlaying())
-            changeState (Playing);
-        else
-            changeState (Stopped);
-    }
-    
-    void openButtonClicked()
-    {
-        FileChooser chooser ("Select a Wave file to play...",
-                             File::nonexistent,
-                             "*.wav");
-        
-        if (chooser.browseForFileToOpen())
-        {
-            File file (chooser.getResult());
-            
-            if (auto* reader = afManager.createReaderFor (file))
-            {
-                std::unique_ptr<AudioFormatReaderSource> newSource (new AudioFormatReaderSource (reader, true));
-                transportSource.setSource (newSource.get(), 0, nullptr, reader->sampleRate);
-                playButton.setEnabled (true);
-                thumbComp.setFile (file);
-                readerSource.reset (newSource.release());
-            }
-        }
-    }
-    
-    void playButtonClicked()
-    {
-        changeState (Starting);
-    }
-    
-    void stopButtonClicked()
-    {
-        changeState (Stopping);
-    }
+    MultiChannelAudioSource mixer;
+  
     
     //pitch variables
     Array<String> notes ={"A", "A#", "B", "C" ,"C#" , "D", "D#" , "E" , "F","F#", "G", "G#"};
     Array<String> midiTable;
     
+     int discreteCount = 0;
+    
+    //SuperpoweredBandpassFilterbank superFB;
+    float frequencies[8] = { 55, 110, 220, 440, 880, 1760, 3520, 7040 };
+    float widths[8] = { 1, 1, 1, 1, 1, 1, 1, 1 };
+    float bands[128];
+    float* peak, *sum;
     
     //==============================================================================
     // Your private member variables go here...
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
+
+class UploadCSVComp : private Timer
+{
+    public:
+    UploadCSVComp();
+    ~UploadCSVComp();
+    
+    //Set up data output stream
+    void timerCallback() override;
+    
+    OwnedArray<String> totalValuesUpdater;
+    
+    
+    
+};
+
+
+
+

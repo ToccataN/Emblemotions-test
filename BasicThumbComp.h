@@ -38,14 +38,14 @@ public:
     {
         g.fillAll (Colours::black);
         g.setColour (Colours::darkblue);
-        g.drawFittedText ("No File Loaded", getLocalBounds().reduced(0, 10), Justification::centred, 1.0f);
+        g.drawFittedText ("No File Loaded", getLocalBounds().reduced(0, 10), Justification::centred, 2.0f);
     }
     
     void paintIfFileLoaded (Graphics& g)
     {
         g.fillAll (Colours::black);
         g.setColour (Colours::darkred);
-        thumbnail.drawChannels (g, getLocalBounds().reduced(0, 10), 0.0, thumbnail.getTotalLength(), 0.3f);
+        thumbnail.drawChannels (g, getLocalBounds().reduced(0, 10), 0.0, thumbnail.getTotalLength(), 0.2f);
     }
     
     void changeListenerCallback (ChangeBroadcaster* source) override
