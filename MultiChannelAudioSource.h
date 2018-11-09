@@ -1,6 +1,10 @@
 #pragma once
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "BasicThumbComp.h"
+#include "SuperpoweredSimple.h"
+#include "superpoweredanalyzer.h"
+#include "SuperpoweredBandpassFilterBank.h"
+
 
 class MultiChannelAudioSource : public PositionableAudioSource,
                                 public ChangeBroadcaster
@@ -23,7 +27,6 @@ public:
             formatManager.registerBasicFormats();
             isRegistered = true;
         }
-        std::cout << "I'm loaded!" << std::endl;
         // This deletes any readers created by a previous call to loadAudioAssets()
         // and clears the array for a fresh load of the incoming audioFileSet
         releaseResources();
@@ -152,12 +155,39 @@ public:
         
         if (stopped == false)
         {
-            for (int i = 0; i < bufferToFill.buffer->getNumChannels(); ++i)
+           /* *** Passing variables into Superpowered from these channels
+             appears to cause threading issues, despite successful
+             compilation. There seems to be some sort of optimization
+             setting that I am having difficulty getting around. ***
+            
+            auto *buff = bufferToFill.buffer;
+           
+            float *leftChannel = buff->getWritePointer(0);
+            float *rightChannel = buff->getWritePointer(1);
+            
+            SuperpoweredInterleave(leftChannel, rightChannel, output, buff->getNumSamples());
+            
+            analyzer->process(output, 8);
+            */
+            if(inputReaders.size() > 1)
             {
-                auto writePointer = bufferToFill.buffer->getWritePointer(i);
+              for (int i = 0; i < bufferToFill.buffer->getNumChannels(); ++i)
+              {
+                
+                  auto writePointer = bufferToFill.buffer->getWritePointer(i);
+                  AudioBuffer<float> proxyBuffer(&writePointer, 1, bufferToFill.buffer->getNumSamples());
+                  AudioSourceChannelInfo proxyInfo(&proxyBuffer, bufferToFill.startSample, bufferToFill.numSamples);
+                  inputReaders.getUnchecked(i)->getNextAudioBlock(proxyInfo);
+                
+               }
+            }
+            else
+            {
+                auto writePointer = bufferToFill.buffer->getWritePointer(0);
                 AudioBuffer<float> proxyBuffer(&writePointer, 1, bufferToFill.buffer->getNumSamples());
                 AudioSourceChannelInfo proxyInfo(&proxyBuffer, bufferToFill.startSample, bufferToFill.numSamples);
-                inputReaders.getUnchecked(i)->getNextAudioBlock(proxyInfo);
+                inputReaders.getFirst()->getNextAudioBlock(proxyInfo);
+    
             }
             
             if (playing == false)
@@ -258,6 +288,10 @@ private:
     bool playing = false, stopped = true;
     float currentGain = 1.0f, previousGain = 1.0f;
     double blockSize, sampleRate;
+    
+    float *output;
+    
+    SuperpoweredAnalyzer *analyzer = new SuperpoweredAnalyzer(44100);
     
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MultiChannelAudioSource)

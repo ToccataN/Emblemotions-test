@@ -10,12 +10,14 @@
 #include "MainComponent.h"
 
 
-MainComponent::MainComponent() : audioAnalyser(fftOrder),
-                                 atCache(20)
-                                 //,superFB(8, frequencies, widths, 44100)
+MainComponent::MainComponent() :  audioAnalyser(fftOrder)
+                                 ,upCSV()
+                                 ,atCache(20)
+
 
 {
-
+    superFB = new SuperpoweredBandpassFilterbank(8, frequencies, widths, 44100);
+    
     auto audioDevice = deviceManager.getCurrentAudioDevice();
     auto numInputChannels = jmax(audioDevice != nullptr ? audioDevice->getActiveInputChannels() .countNumberOfSetBits() : 1, 1);
     auto outputChannels = audioDevice != nullptr ? audioDevice->getActiveOutputChannels() .countNumberOfSetBits() : 2;
@@ -60,7 +62,6 @@ MainComponent::MainComponent() : audioAnalyser(fftOrder),
         int in = (i % 12);
         if(in >= notes.size()) in -= 12;
         midiTable.insert(i, notes[in]);
-        std::cout << midiTable[i] << std::endl;
     }
     
 }
@@ -87,11 +88,16 @@ void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRat
     mixer.prepareToPlay (samplesPerBlockExpected, lastSampleRate);
 }
 
-void MainComponent::process(float data)
+void MainComponent::process(float data,const float input)
 {
     if(fftIndex == fftSize)
     {
-
+      /*
+        float *tempData= nullptr;
+        SuperpoweredInterleave(input[0], input[1], tempData, sizeof(input));
+        superFB->process(tempData, &this->bands[0][0], peak, sum, sizeof(input));
+      */
+        
       audioAnalyser.performRealOnlyForwardTransform(fftData);
       float temp = 0.0;
       int index = 0;
@@ -109,14 +115,13 @@ void MainComponent::process(float data)
             }
             
         }
-        /*
+        
         for(auto i = 0; i < 128; ++i)
         {
-            std::cout << "fres: " << String(bands[i]) << std::endl;
+            //std::cout << "fres: " << String(bands[i][0]) << std::endl;
         }
-        */
-      pitchDetector(temp, index);
-      fftIndex= 0;
+        pitchDetector(temp, index);
+        fftIndex= 0;
         
     }
    
@@ -156,15 +161,15 @@ void MainComponent::addOSCMessageArgument (const OSCArgument& arg, String m)
     {
         typeAsString = "float32";
         if (m == alphaMessage)
-            museAlpha =  museStrings[0] + String (arg.getFloat32());
+            museAlpha =  String (arg.getFloat32());
         else if (m == betaMessage)
-            museBeta = museStrings[1] + String(arg.getFloat32());
+            museBeta =  String(arg.getFloat32());
         else if (m == deltaMessage)
-            museDelta = museStrings[2] + String(arg.getFloat32());
+            museDelta =  String(arg.getFloat32());
         else if (m == gammaMessage)
-            museGamma = museStrings[3] + String(arg.getFloat32());
+            museGamma =  String(arg.getFloat32());
         else if (m == thetaMessage)
-            museTheta = museStrings[4] + String(arg.getFloat32());
+            museTheta = String(arg.getFloat32());
         
     }
     else if (arg.isInt32())
@@ -215,6 +220,7 @@ void MainComponent::updateLabelText(const String& text,const Label& label, int i
 
 void MainComponent::timerCallback()
 {
+    if(discreteCount ==30) discreteCount = 0;
     discreteCount += 1;
     
     valence = floor(affValence()*100)/100;
@@ -226,11 +232,11 @@ void MainComponent::timerCallback()
     
     updateLabelText(String(audioFFTValue), audioValue);
    
-    updateLabelText(museAlpha, *museLabels[0], 0);
-    updateLabelText(museBeta, *museLabels[1], 1);
-    updateLabelText(museDelta, *museLabels[2], 2);
-    updateLabelText(museGamma, *museLabels[3], 3);
-    updateLabelText(museTheta, *museLabels[4], 4);
+    updateLabelText(museStrings[0] + museAlpha, *museLabels[0], 0);
+    updateLabelText(museStrings[1] + museBeta, *museLabels[1], 1);
+    updateLabelText(museStrings[2] + museDelta, *museLabels[2], 2);
+    updateLabelText(museStrings[3] + museGamma, *museLabels[3], 3);
+    updateLabelText(museStrings[4] + museTheta, *museLabels[4], 4);
     
     updateLabelText(affDexStrings[0] + String(joy), *affDexLabels[0], 0);
     updateLabelText(affDexStrings[1] + String(anger), *affDexLabels[1], 1);
@@ -241,9 +247,9 @@ void MainComponent::timerCallback()
     
     updateLabelText(currentNote, noteValue);
     
-    String updateCSV = String(discreteCount) + String(audioFFTValue) + museAlpha + museBeta + museDelta + museGamma + museTheta + String(joy) +String(anger) + String(disgust) +  String(engage) +  String(att) +String(valence) + currentNote;
+    String updateCSV = String(audioFFTValue) + " | " + museAlpha + " | " + museBeta + " | " + museDelta + " | " + museGamma + " | " + museTheta + " | " + String(joy) + " | " + String(anger) + " | " + String(disgust) + " | " + String(engage) + " | " + String(att) + " | " + String(valence) + " | " + currentNote;
     
-    //totalValues.add(&updateCSV);
+    upCSV.accessUpdateValues(discreteCount, updateCSV);
     
 
 }
@@ -253,14 +259,14 @@ void MainComponent::getNextAudioBlock (const AudioSourceChannelInfo& bufferToFil
     
     mixer.getNextAudioBlock(bufferToFill);
     
-    for(int i= 0 ; i < bufferToFill.buffer->getNumChannels(); ++i){
-        auto* inputChannel = bufferToFill.buffer->getReadPointer(0, bufferToFill.startSample);
+    auto *input = bufferToFill.buffer;
+   
     
+    for(int i= 0 ; i < input->getNumChannels(); ++i){
+        auto* inputChannel = input->getReadPointer(i, bufferToFill.startSample);
+       
         for(int samp = 0; samp < bufferToFill.numSamples; ++samp){
-                process(inputChannel[samp]);
-            //float *tempDat = nullptr;
-            //memcpy(tempDat, &inputChannel[samp], sizeof(inputChannel[samp]));
-           // superFB.process(tempDat, bands, peak, sum, 512);
+                process(inputChannel[samp], *inputChannel);
             
         }
         
@@ -276,7 +282,7 @@ void MainComponent::pitchDetector(float data, int index)
         double f = ((index * 44100) / 512);
         double m = round(log(f/440.0)/log(2) * 12 + 67);
         if((m > 20 || m < 128 )&& notes.indexOf(midiTable[m]) != -1){
-            //currentNote= "Pitch: " + String(midiTable[m]);
+            currentNote= "Pitch: " + String(midiTable[m]);
         }
         
         fftSampleIndex = 0;
@@ -428,32 +434,8 @@ void MainComponent::stopButtonClicked()
     mixer.stop();
 }
 
-UploadCSVComp::UploadCSVComp()
-{
-    startTimer(10000);
-    
-}
 
-UploadCSVComp::~UploadCSVComp()
-{
-    
-}
 
-void UploadCSVComp::timerCallback()
-{
-   /*
-    File f("~/packet.csv");
-    FileOutputStream fs(f);
-    
-    
-    String header = "N | FFT | Alpha | Beta | Delta | Gamma | Theta | Joy | Anger | Disgust | Engagement | Attention | Valence | Pitch";
-    
-    fs.writeText(header, true, false, "\n");
-    
-    */
-   
-    
-}
 
 
 

@@ -12,6 +12,8 @@
 #include "BasicThumbComp.h"
 #include "MultiChannelAudioSource.h"
 #include "SuperpoweredBandpassFilterBank.h"
+#include "SuperpoweredSimple.h"
+#include "UploadCSVComp.h"
 
 //==============================================================================
 /*
@@ -41,7 +43,7 @@ public:
     void paint (Graphics& g) override;
     void resized() override;
     
-    void process(float data);
+    void process(float data, const float input);
     void updateLabelText(const String& text, const Label& label, int index = 0 );
     void timerCallback() override;
     
@@ -66,8 +68,10 @@ public:
         fftSize = 1 << fftOrder
     };
     
-    //pitch detector aubio
+    //pitch detector (rough version)
     void pitchDetector(float data, int index);
+    
+    //current file multitrack
     HashMap<int, File> FileArray;
     void openButtonClicked(int index);
     void playButtonClicked();
@@ -76,7 +80,7 @@ public:
 private:
     
     double lastSampleRate= 44100;
-    double audioFFTValue;
+    double audioFFTValue = 0.0;
     
     dsp::FFT audioAnalyser;
     
@@ -91,7 +95,7 @@ private:
     Array<String> affDexStrings = {"Joy: ", "Anger: ", "Disgust: ", "Engagement: ",
         "Attention: ", "Valence: "};
     
-    
+    UploadCSVComp upCSV;
     
     Label audioValue, appHeader, noteValue;
     String currentNote= "Pitch: ";
@@ -123,8 +127,7 @@ private:
     TextButton playButton;
     TextButton stopButton;
     
-    
-    
+    //this instantiates the multi-track "stem" format funcitonality for wav files.
     MultiChannelAudioSource mixer;
   
     
@@ -132,34 +135,20 @@ private:
     Array<String> notes ={"A", "A#", "B", "C" ,"C#" , "D", "D#" , "E" , "F","F#", "G", "G#"};
     Array<String> midiTable;
     
-     int discreteCount = 0;
+    int discreteCount = 0;
     
-    //SuperpoweredBandpassFilterbank superFB;
+    SuperpoweredBandpassFilterbank *superFB;
     float frequencies[8] = { 55, 110, 220, 440, 880, 1760, 3520, 7040 };
     float widths[8] = { 1, 1, 1, 1, 1, 1, 1, 1 };
-    float bands[128];
+    float bands[128][8];
     float* peak, *sum;
-    
     //==============================================================================
     // Your private member variables go here...
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
 
-class UploadCSVComp : private Timer
-{
-    public:
-    UploadCSVComp();
-    ~UploadCSVComp();
-    
-    //Set up data output stream
-    void timerCallback() override;
-    
-    OwnedArray<String> totalValuesUpdater;
-    
-    
-    
-};
+
 
 
 
